@@ -36,6 +36,7 @@ AI Health Symptom Checker is a web-based app that uses AI to provide possible he
    npm start
 4. Access the app at http://localhost:3000
 
+
 ---
 
 ## Usage
@@ -44,10 +45,16 @@ AI Health Symptom Checker is a web-based app that uses AI to provide possible he
 - View results and advice instantly.
 
 
+---
+
 ## Tech Stack
 - Front-End: React.js
 - Back-End: Node.js, Express.js
 - AI Integration: OpenAI API (or dummy data for now)
+
+
+---
+
 
 ## Future Enhancements
 - Add user history tracking.
