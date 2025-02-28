@@ -1,0 +1,9 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+}
+
+#root {
+    padding-top: 60px; /* Adjusts for the fixed Navbar height */
+}

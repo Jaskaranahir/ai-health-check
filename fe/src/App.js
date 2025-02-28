@@ -1,40 +1,36 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Navbar from './components/Navbar'; // Import Navbar
+import SignIn from './pages/SignIn';
+import HomePage from './pages/HomePage';
+import SymptomCheck from './pages/SymptomCheck';
+import ContactDoctor from './pages/ContactDoctor';
+import Dashboard from './pages/Dashboard';
+import Findpharmacy from './pages/Findpharmacy'; 
+
+
+
+function PrivateRoute({ element }) {
+    const token = localStorage.getItem('token'); // ✅ Check if user is logged in
+    return token ? element : <Navigate to="/signin" />;
+}
+
+
 
 function App() {
-    const [symptoms, setSymptoms] = useState('');
-    const [results, setResults] = useState(null);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            const response = await axios.post('http://localhost:5001/symptoms', { symptoms });
-            setResults(response.data);
-        } catch (error) {
-            console.error('Error connecting to backend:', error);
-        }
-    };
-
     return (
-        <div style={{ padding: '20px' }}>
-            <h1>AI Health Symptom Checker</h1>
-            <form onSubmit={handleSubmit}>
-                <input
-                    type="text"
-                    value={symptoms}
-                    onChange={(e) => setSymptoms(e.target.value)}
-                    placeholder="Enter symptoms"
-                    style={{ padding: '10px', marginRight: '10px', width: '300px' }}
-                />
-                <button type="submit" style={{ padding: '10px' }}>Check</button>
-            </form>
-            {results && (
-                <div style={{ marginTop: '20px' }}>
-                    <h2>Results:</h2>
-                    <pre>{JSON.stringify(results, null, 2)}</pre>
-                </div>
-            )}
-        </div>
+        <Router>
+            <Navbar /> {/* Navbar is now visible across all pages */}
+            <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/signin" element={<SignIn />} />
+                <Route path="/symptom-check" element={<SymptomCheck />} />
+                <Route path="/contact-doctor" element={<ContactDoctor />} />
+                <Route path="/find-pharmacy" element={<Findpharmacy />} /> {/* ✅ Match the route to your file */}
+                <Route path="/dashboard" element={<PrivateRoute element={<Dashboard />} />} />
+
+            </Routes>
+        </Router>
     );
 }
 
