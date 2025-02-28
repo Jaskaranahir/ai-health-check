@@ -38,7 +38,7 @@ function SymptomCheck() {
         setResults(null);
     
         try {
-            const response = await fetch('http://localhost:5001/symptoms', {
+            const response = await fetch('https://ai-health-check.onrender.com/symptoms', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData),

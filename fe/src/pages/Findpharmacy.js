@@ -19,7 +19,7 @@ function FindPharmacy() {
         }
 
         try {
-            const response = await axios.post('http://localhost:5001/find-pharmacies', {
+            const response = await axios.post('https://ai-health-check.onrender.com/find-pharmacies', {
                 city,
                 openNow,
                 minRating,

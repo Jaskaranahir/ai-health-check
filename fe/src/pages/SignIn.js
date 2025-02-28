@@ -29,8 +29,8 @@ function SignIn() {
 
         try {
             const url = isLogin
-                ? 'http://localhost:5001/login'  // Login URL
-                : 'http://localhost:5001/create-account';  // Sign-up URL
+                ? 'https://ai-health-check.onrender.com/login'  // Login URL
+                : 'https://ai-health-check.onrender.com/create-account';  // Sign-up URL
 
             const response = await axios.post(url, { email, password });
 

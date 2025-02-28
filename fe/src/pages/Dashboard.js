@@ -27,7 +27,7 @@ function Dashboard() {
     // ✅ Fetch user history from backend (Mock for now)
     const fetchUserHistory = async (email) => {
         try {
-            const response = await axios.get(`http://localhost:5001/user-history?email=${email}`);
+            const response = await axios.get(`https://ai-health-check.onrender.com/user-history?email=${email}`);
             setHistory(response.data);
         } catch (error) {
             console.error('Error fetching history:', error);

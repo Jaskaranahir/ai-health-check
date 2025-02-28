@@ -21,7 +21,7 @@ function ContactDoctor() {
         }
 
         try {
-            const response = await axios.post('http://localhost:5001/search-doctors', { city, specialty, urgency });
+            const response = await axios.post('https://ai-health-check.onrender.com/search-doctors', { city, specialty, urgency });
             setDoctors(response.data);
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to fetch doctors. Try again.');
