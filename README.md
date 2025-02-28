@@ -5,17 +5,20 @@ AI Health Symptom Checker is a web-based app that uses AI to provide possible he
 ---
 
 ## Features
-- Input symptoms via a user-friendly form.
-- Get AI-generated suggestions for possible conditions.
-- Receive basic advice based on the analysis.
-- Front-end built with React and back-end using Node.js/Express.
+- Symptom Input Form – Users can enter their symptoms, duration, severity, and additional factors.
+- AI-Generated Health Analysis – Get possible conditions and recommendations.
+- Doctor & Pharmacy Search – Find nearby doctors and pharmacies for medical help.
+- User Authentication – Secure login & account system with JWT authentication.
+- History Tracking – Users can track past symptom checks, doctor visits, and pharmacy searches.
+- Responsive UI – Works across desktops, tablets, and mobile devices.
 
 ---
 
 ## Installation
 
 ### Prerequisites
-- Node.js installed on your machine.
+- Node.js and npm installed on your machine.
+- MongoDB (for storing user data and history) 
 
 ### Steps
 1. Clone the repository:
@@ -29,6 +32,8 @@ AI Health Symptom Checker is a web-based app that uses AI to provide possible he
    npm install
    node src/server.js
 
+   Backend running on: http://localhost:5001
+
 3. Set up the front-end
    ```bash
    cd ../frontend
@@ -40,26 +45,41 @@ AI Health Symptom Checker is a web-based app that uses AI to provide possible he
 ---
 
 ## Usage
-- Enter symptoms (e.g., fever, headache) in the input field.
-- Click Check to analyze.
-- View results and advice instantly.
+- Sign in or create an account to save your history (All the user search will be saved only if the user is logged in)
+  
+The below features are open to use for all the users no need to sign in.
+- Enter symptoms (e.g., fever, headache) and additional details.
+- Click "Check Symptoms" to get AI-generated analysis.
+- View recommendations & possible conditions.
+- Search for doctors or pharmacies nearby for medical assistance.
+- Track past health checks in the dashboard (for signed in users only)
 
 
 ---
 
 ## Tech Stack
-- Front-End: React.js
-- Back-End: Node.js, Express.js
-- AI Integration: OpenAI API (or dummy data for now)
+- Frontend: React.js
+- Backend: Node.js, Express.js
+- Database: MongoDB (for storing user data & history)
+- Authentication: JWT (JSON Web Token)
+- AI API: Gemini AI (for symptom analysis)
+- Google Maps API: For doctor & pharmacy search
 
 
 ---
 
 
 ## Future Enhancements
-- Add user history tracking.
-- Enhance AI accuracy with better models.
-- Improve UI for mobile responsiveness.
+- Improve AI Accuracy – Fine-tune AI model for better analysis.
+- Integrate User Dashboard – Display detailed health reports.
+- Mobile App Version – Extend to iOS & Android.
+- Emergency Alerts – Notify users of severe symptoms.
+
+## License
+This project is open-source and free to use.
+
+## Contact
+For questions, reach out to [jaskaranjattahir01@gmail.com] or open an issue on GitHub.
 
 
    
