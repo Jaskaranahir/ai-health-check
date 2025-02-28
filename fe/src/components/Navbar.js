@@ -13,7 +13,7 @@ function Navbar() {
     };
 
     return (
-        <nav style={styles.navbar}>
+        <nav style={styles.navbar}> 
             <h2 style={styles.logo}>AI Health Symptom Checker</h2>
 
             <div style={styles.navLinks}>
