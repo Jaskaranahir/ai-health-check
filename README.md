@@ -79,7 +79,7 @@ The below features are open to use for all the users no need to sign in.
 This project is open-source and free to use.
 
 ## Contact
-For questions, reach out to [jaskaranjattahir01@gmail.com] or open an issue on GitHub.
+For questions, reach out to jaskaranjattahir01@gmail.com or open an issue on GitHub.
 
 
    
