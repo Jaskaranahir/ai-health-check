@@ -3,7 +3,7 @@
 AI Health Symptom Checker is a web-based app that uses AI to provide possible health conditions based on user-submitted symptoms. It helps users gain quick health insights and recommendations.
 
 
-## 🔗 Live Demo
+## Live Demo
 [Check it out on Netlify](https://ai-health-check.netlify.app)
 
 ---
