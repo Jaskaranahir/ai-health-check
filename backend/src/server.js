@@ -203,7 +203,7 @@ app.post('/symptoms', async (req, res) => {
 
         // ✅ Call the Google Gemini API with the corrected model
         const response = await axios.post(
-            `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${GOOGLE_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GOOGLE_API_KEY}`,
             {
                 contents: [{ role: "user", parts: [{ text: userPrompt }] }],
             },
