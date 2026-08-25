@@ -1,4 +1,19 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://ai-health-check.onrender.com';
+
+const URGENCY_PRESENTATION = {
+    low: { label: 'Low urgency', background: '#e8f5e9', color: '#2e7d32', border: '#a5d6a7' },
+    medium: { label: 'Worth a closer look', background: '#fff8e1', color: '#a76a00', border: '#ffe082' },
+    high: { label: 'See a doctor soon', background: '#ffebee', color: '#c62828', border: '#ef9a9a' },
+};
+
+const LIKELIHOOD_PRESENTATION = {
+    low: { label: 'Less likely', background: '#eceff1', color: '#455a64' },
+    moderate: { label: 'Possible', background: '#e3f2fd', color: '#1565c0' },
+    high: { label: 'Most likely', background: '#ede7f6', color: '#5e35b1' },
+};
 
 function SymptomCheck() {
     const [formData, setFormData] = useState({
@@ -36,36 +51,36 @@ function SymptomCheck() {
         setLoading(true);
         setError(null);
         setResults(null);
-    
+
         try {
-            const response = await fetch('https://ai-health-check.onrender.com/symptoms', {
+            const response = await fetch(`${API_BASE_URL}/symptoms`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData),
             });
-    
-            if (!response.ok) {
-                throw new Error('Failed to fetch analysis.');
-            }
-    
+
             const data = await response.json();
-            console.log("API Response:", data);  // ✅ Log response for debugging
-    
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to fetch analysis.');
+            }
+
             setResults(data);
         } catch (error) {
-            setError('Error fetching AI analysis. Please try again.');
+            setError(error.message || 'Error fetching AI analysis. Please try again.');
             console.error(error);
         } finally {
             setLoading(false);
         }
     };
-    
+
+    const urgency = URGENCY_PRESENTATION[results?.overallUrgency] || URGENCY_PRESENTATION.low;
 
     return (
         <div style={styles.container}>
             <div style={styles.centered}>
                 <h1 style={styles.title}>AI Symptom Checker</h1>
-                <p style={styles.subtitle}>Fill out the form below to get an AI-based health analysis.</p>
+                <p style={styles.subtitle}>Fill out the form below to get a calm, clear health check.</p>
 
                 <form onSubmit={handleSubmit} style={styles.form}>
                     <div style={styles.formGroup}>
@@ -146,26 +161,74 @@ function SymptomCheck() {
                 {error && <p style={styles.error}>{error}</p>}
 
                 {results && (
-                   <div style={styles.results}>
-                       <h2 style={styles.resultTitle}>AI Health Analysis</h2>
-                       <div style={styles.resultContent}>
-                           <h3 style={styles.resultSectionTitle}>Possible Diagnosis</h3>
-                           <p style={styles.resultParagraph}>
-                               {results.analysis.includes("Possible Medical Conditions:")
-                                   ? results.analysis.split("Possible Medical Conditions:")[1].split("**Steps the Person Should Take:**")[0].trim()
-                                   : "No diagnosis found."}
-                           </p>
-               
-                           <h3 style={styles.resultSectionTitle}>Advice</h3>
-                           <p style={styles.resultParagraph}>
-                               {results.analysis.includes("**Steps the Person Should Take:**")
-                                   ? results.analysis.split("**Steps the Person Should Take:**")[1].split("**Should they consult a doctor immediately?**")[0].trim()
-                                   : "No advice found."}
-                           </p>
-    
-                       </div>
-                   </div>
-                )}  
+                    <div style={styles.results}>
+                        <h2 style={styles.resultTitle}>Your Symptom Check</h2>
+
+                        <div
+                            style={{
+                                ...styles.urgencyBanner,
+                                background: urgency.background,
+                                color: urgency.color,
+                                borderColor: urgency.border,
+                            }}
+                        >
+                            {urgency.label}
+                        </div>
+
+                        {results.disclaimer && <p style={styles.disclaimerBox}>{results.disclaimer}</p>}
+
+                        <div style={styles.resultContent}>
+                            <h3 style={styles.resultSectionTitle}>What this could be</h3>
+                            {(results.possibleConditions || []).map((item, index) => {
+                                const likelihood = LIKELIHOOD_PRESENTATION[item.likelihood] || LIKELIHOOD_PRESENTATION.low;
+                                return (
+                                    <div key={index} style={styles.conditionCard}>
+                                        <div style={styles.conditionCardHeader}>
+                                            <span style={styles.conditionName}>{item.condition}</span>
+                                            <span
+                                                style={{
+                                                    ...styles.likelihoodBadge,
+                                                    background: likelihood.background,
+                                                    color: likelihood.color,
+                                                }}
+                                            >
+                                                {likelihood.label}
+                                            </span>
+                                        </div>
+                                        <p style={styles.resultParagraph}>{item.explanation}</p>
+                                    </div>
+                                );
+                            })}
+
+                            {results.selfCareSteps?.length > 0 && (
+                                <>
+                                    <h3 style={styles.resultSectionTitle}>Things that may help</h3>
+                                    <ul style={styles.resultList}>
+                                        {results.selfCareSteps.map((step, index) => (
+                                            <li key={index} style={styles.resultListItem}>{step}</li>
+                                        ))}
+                                    </ul>
+                                </>
+                            )}
+
+                            {results.whenToSeeADoctor?.length > 0 && (
+                                <div style={styles.doctorCareBox}>
+                                    <h3 style={styles.resultSectionTitle}>When to see a doctor</h3>
+                                    <ul style={styles.resultList}>
+                                        {results.whenToSeeADoctor.map((step, index) => (
+                                            <li key={index} style={styles.resultListItem}>{step}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={styles.ctaRow}>
+                            <Link to="/contact-doctor" style={styles.ctaButton}>Find a Nearby Doctor</Link>
+                            <Link to="/find-pharmacy" style={styles.ctaButtonSecondary}>Find a Nearby Pharmacy</Link>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -176,7 +239,7 @@ const styles = {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        height: '100vh',
+        minHeight: '100vh',
         background: '#f5f5f5',
         padding: '20px', // Add padding to avoid cutoff on smaller screens
     },
@@ -187,6 +250,7 @@ const styles = {
         background: '#fff',
         borderRadius: '10px',
         boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+        margin: '40px 0',
     },
     title: {
         textAlign: 'center',
@@ -246,7 +310,7 @@ const styles = {
     results: {
         marginTop: '30px',
         padding: '20px',
-        background: '#e8f5e9', // Light green background for result section
+        background: '#fafafa',
         borderRadius: '10px',
         boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
         textAlign: 'left', // Left-align for better readability
@@ -256,19 +320,75 @@ const styles = {
     resultTitle: {
         fontSize: '20px',
         fontWeight: 'bold',
-        color: '#4caf50',
+        color: '#333',
         marginBottom: '15px',
+    },
+    urgencyBanner: {
+        display: 'inline-block',
+        padding: '8px 16px',
+        borderRadius: '20px',
+        border: '1px solid',
+        fontSize: '14px',
+        fontWeight: 'bold',
+        marginBottom: '15px',
+    },
+    disclaimerBox: {
+        fontSize: '13px',
+        color: '#666',
+        background: '#f0f4f8',
+        border: '1px solid #dbe4ec',
+        borderRadius: '8px',
+        padding: '12px 14px',
+        marginBottom: '20px',
+    },
+    resultContent: {
+        marginTop: '10px',
     },
     resultSectionTitle: {
         fontSize: '18px',
         fontWeight: 'bold',
         marginBottom: '10px',
+        marginTop: '20px',
         color: '#333',
     },
     resultParagraph: {
-        fontSize: '16px',
-        marginBottom: '15px',
+        fontSize: '15px',
+        marginBottom: '0',
         color: '#555',
+    },
+    conditionCard: {
+        background: '#fff',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '14px 16px',
+        marginBottom: '12px',
+    },
+    conditionCardHeader: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '8px',
+        marginBottom: '6px',
+    },
+    conditionName: {
+        fontSize: '16px',
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    likelihoodBadge: {
+        fontSize: '12px',
+        fontWeight: 'bold',
+        padding: '4px 10px',
+        borderRadius: '12px',
+        whiteSpace: 'nowrap',
+    },
+    doctorCareBox: {
+        background: '#fff8f0',
+        border: '1px solid #f3ddb8',
+        borderRadius: '8px',
+        padding: '14px 16px',
+        marginTop: '10px',
     },
     resultList: {
         listStyleType: 'disc',
@@ -280,6 +400,35 @@ const styles = {
         fontSize: '14px',
         marginBottom: '5px',
         color: '#333',
+    },
+    ctaRow: {
+        display: 'flex',
+        gap: '10px',
+        flexWrap: 'wrap',
+        marginTop: '25px',
+    },
+    ctaButton: {
+        flex: '1 1 200px',
+        textAlign: 'center',
+        padding: '12px',
+        background: '#4caf50',
+        color: '#fff',
+        borderRadius: '5px',
+        textDecoration: 'none',
+        fontSize: '14px',
+        fontWeight: 'bold',
+    },
+    ctaButtonSecondary: {
+        flex: '1 1 200px',
+        textAlign: 'center',
+        padding: '12px',
+        background: '#fff',
+        color: '#4caf50',
+        border: '1px solid #4caf50',
+        borderRadius: '5px',
+        textDecoration: 'none',
+        fontSize: '14px',
+        fontWeight: 'bold',
     },
     error: {
         color: 'red',
@@ -319,7 +468,5 @@ const styles = {
         transition: 'opacity 0.2s ease-in-out, visibility 0.2s ease-in-out',
     },
 };
-
-
 
 export default SymptomCheck;

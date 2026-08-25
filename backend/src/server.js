@@ -4,8 +4,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const mongoose = require('mongoose');
+const Anthropic = require('@anthropic-ai/sdk');
 const User = require('../models/User');  // Ensure this file exists
-require('dotenv').config(); 
+require('dotenv').config();
 
 const app = express();
 app.use(cors());
@@ -13,8 +14,9 @@ app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const MONGO_URI = process.env.MONGO_URI;
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ✅ Connect to MongoDB
 mongoose.connect(MONGO_URI, {
@@ -182,42 +184,116 @@ app.get('/user-history', async (req, res) => {
 });
 
 
+// ✅ Tool definition forcing a calm, structured symptom analysis out of Claude
+const SYMPTOM_ANALYSIS_TOOL = {
+    name: 'provide_symptom_analysis',
+    description: "Provide a calm, structured, reassuring analysis of a patient's described symptoms.",
+    strict: true,
+    input_schema: {
+        type: 'object',
+        properties: {
+            overallUrgency: {
+                type: 'string',
+                enum: ['low', 'medium', 'high'],
+                description: 'How urgently the person should seek medical care, based only on what genuinely warrants it.',
+            },
+            disclaimer: {
+                type: 'string',
+                description: 'A brief, calm safety note: this is not a diagnosis, and to seek emergency care for a genuine emergency.',
+            },
+            possibleConditions: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        condition: { type: 'string' },
+                        likelihood: { type: 'string', enum: ['low', 'moderate', 'high'] },
+                        explanation: { type: 'string' },
+                    },
+                    required: ['condition', 'likelihood', 'explanation'],
+                    additionalProperties: false,
+                },
+                description: '2 to 4 everyday explanations ordered from most to least likely - never ordered by severity, and never led with rare or frightening diagnoses.',
+            },
+            selfCareSteps: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Calm, practical things the person can do at home, when appropriate.',
+            },
+            whenToSeeADoctor: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Clear, specific signs that mean it is time to see a doctor.',
+            },
+        },
+        required: ['overallUrgency', 'disclaimer', 'possibleConditions', 'selfCareSteps', 'whenToSeeADoctor'],
+        additionalProperties: false,
+    },
+};
+
+const SYMPTOM_ANALYSIS_SYSTEM_PROMPT = `You are a calm, reassuring health assistant inside a symptom-checker app. Your defining trait is that you do NOT scare people, unlike typical symptom checkers that jump straight to worst-case diagnoses.
+
+Follow these rules:
+- Always list the most common, everyday explanations first. Order possibleConditions from most likely to least likely - never from most to least severe, and never lead with a rare or alarming condition.
+- Use warm, plain, non-alarming language, like a calm, experienced nurse reassuring a worried friend. Avoid clinical jargon and dramatic phrasing ("could be fatal", "serious risk of...") unless the situation genuinely warrants it.
+- Default toward "low" overallUrgency for everyday symptoms. Only raise it to "medium" or "high" when the described duration, severity, and factors genuinely warrant it.
+- Even when urgency is high, stay calm and clear - state plainly what to do next rather than emphasizing danger.
+- Frame the whole response as "here's what this probably is, and what to do about it," not a list of diseases to worry about.
+- Only include a condition in possibleConditions if it is a plausible explanation given the input - the list should feel reassuringly ordinary, not exhaustively worst-case.
+
+Always respond by calling the provide_symptom_analysis tool.`;
+
 app.post('/symptoms', async (req, res) => {
-    const { symptoms, duration, severity, factors, ageGroup } = req.body;
+    const { symptoms, duration, severity, ageGroup } = req.body;
+    const factors = Array.isArray(req.body.factors) ? req.body.factors : [];
 
     if (!symptoms || !duration || !severity || !ageGroup) {
         return res.status(400).json({ error: "All required fields must be filled." });
     }
 
     try {
-        // ✅ Prepare the AI prompt
-        const userPrompt = `A patient is experiencing the following symptoms: ${symptoms}.
-        Duration: ${duration}. Severity: ${severity}.
-        Additional factors: ${factors.length > 0 ? factors.join(", ") : "None"}.
-        Age group: ${ageGroup}. 
+        const userPrompt = `A patient reports:
+- Symptoms: ${symptoms}
+- Duration: ${duration}
+- Severity: ${severity}
+- Additional factors: ${factors.length > 0 ? factors.join(", ") : "None"}
+- Age group: ${ageGroup}
 
-        Based on this information:
-        - What are possible medical conditions?
-        - What steps should the person take?
-        - Should they consult a doctor immediately?`;
+Provide a calm, reassuring symptom analysis by calling the provide_symptom_analysis tool.`;
 
-        // ✅ Call the Google Gemini API with the corrected model
-        const response = await axios.post(
-            `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GOOGLE_API_KEY}`,
-            {
-                contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-            },
-            { headers: { "Content-Type": "application/json" } }
-        );
+        const response = await anthropic.messages.create({
+            model: 'claude-sonnet-5',
+            max_tokens: 2048,
+            system: SYMPTOM_ANALYSIS_SYSTEM_PROMPT,
+            tools: [SYMPTOM_ANALYSIS_TOOL],
+            tool_choice: { type: 'tool', name: 'provide_symptom_analysis' },
+            messages: [{ role: 'user', content: userPrompt }],
+        });
 
-        // ✅ Extract AI-generated response
-        const aiResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response generated.";
+        const toolUseBlock = response.content.find((block) => block.type === 'tool_use');
 
-        res.json({ analysis: aiResponse });
+        if (!toolUseBlock) {
+            console.error('❌ Claude response had no tool_use block:', response);
+            return res.status(502).json({ error: 'Failed to generate a structured analysis. Please try again.' });
+        }
+
+        res.json(toolUseBlock.input);
 
     } catch (error) {
-        console.error("❌ Error calling Gemini API:", error.response?.data || error.message);
-        res.status(500).json({ error: "Failed to fetch AI analysis. Please try again later." });
+        if (error instanceof Anthropic.RateLimitError) {
+            console.error('❌ Claude rate limit exceeded:', error.message);
+            return res.status(429).json({ error: 'Our AI analysis is a bit busy right now. Please try again in a moment.' });
+        }
+        if (error instanceof Anthropic.AuthenticationError) {
+            console.error('❌ Claude authentication error - check ANTHROPIC_API_KEY:', error.message);
+            return res.status(500).json({ error: 'AI analysis is temporarily unavailable. Please try again later.' });
+        }
+        if (error instanceof Anthropic.APIError) {
+            console.error('❌ Claude API error:', error.status, error.message);
+            return res.status(502).json({ error: 'Failed to fetch AI analysis. Please try again later.' });
+        }
+        console.error('❌ Unexpected error calling Claude:', error);
+        res.status(500).json({ error: 'Failed to fetch AI analysis. Please try again later.' });
     }
 });
 
