@@ -309,49 +309,122 @@ app.post('/symptoms', async (req, res) => {
 
 
 
-// ✅ Find Pharmacies Route
-app.post('/find-pharmacies', async (req, res) => {
-    const { city, openNow, minRating } = req.body;
+// ✅ Shared helpers for location search (pharmacies + doctors)
 
-    if (!city) {
-        return res.status(400).json({ error: 'City is required.' });
+function searchError(statusCode, message) {
+    const err = new Error(message);
+    err.statusCode = statusCode;
+    return err;
+}
+
+// Resolve a search origin from either an explicit lat/lng (from browser geolocation)
+// or a city name (geocoded as a fallback). Geolocation skips geocoding entirely,
+// which removes the biggest source of "city not found"/ambiguous-match failures.
+async function resolveOrigin({ city, lat, lng }) {
+    if (typeof lat === 'number' && typeof lng === 'number') {
+        return { lat, lng };
     }
 
-    try {
-        const geoResponse = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json`, {
-            params: { address: city, key: GOOGLE_MAPS_API_KEY },
-        });
+    if (!city) {
+        return null;
+    }
 
-        if (!geoResponse.data.results.length) {
-            return res.status(404).json({ error: 'City not found.' });
-        }
+    const geoResponse = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+        params: { address: city, key: GOOGLE_MAPS_API_KEY },
+    });
 
-        const { lat, lng } = geoResponse.data.results[0].geometry.location;
+    if (geoResponse.data.status === 'ZERO_RESULTS') {
+        throw searchError(404, "We couldn't find that city. Try a different spelling or a nearby larger city.");
+    }
+    if (geoResponse.data.status !== 'OK') {
+        console.error('❌ Geocoding error:', geoResponse.data.status, geoResponse.data.error_message);
+        throw searchError(502, 'Location lookup is temporarily unavailable. Please try again later.');
+    }
 
-        const placesResponse = await axios.get(`https://maps.googleapis.com/maps/api/place/nearbysearch/json`, {
+    const { lat: gLat, lng: gLng } = geoResponse.data.results[0].geometry.location;
+    return { lat: gLat, lng: gLng };
+}
+
+// Progressively widen the search radius instead of failing hard on a low-density area.
+const SEARCH_RADII_METERS = [5000, 15000, 40000];
+
+async function nearbySearchWithWidening(origin, placesParams) {
+    for (const radius of SEARCH_RADII_METERS) {
+        const placesResponse = await axios.get('https://maps.googleapis.com/maps/api/place/nearbysearch/json', {
             params: {
-                location: `${lat},${lng}`,
-                radius: 5000,
-                type: 'pharmacy',
+                location: `${origin.lat},${origin.lng}`,
+                radius,
                 key: GOOGLE_MAPS_API_KEY,
-                open_now: openNow || false,
+                ...placesParams,
             },
         });
 
-        if (!placesResponse.data.results.length) {
-            return res.status(404).json({ error: 'No pharmacies found.' });
+        const status = placesResponse.data.status;
+
+        // Google's Places API always returns a status, even on HTTP 200 - an empty
+        // `results` array on a quota/auth/request error looks identical to a truly
+        // empty area unless this is checked explicitly.
+        if (status === 'OK') {
+            return { results: placesResponse.data.results, radiusMeters: radius };
+        }
+        if (status !== 'ZERO_RESULTS') {
+            console.error('❌ Places API error:', status, placesResponse.data.error_message);
+            throw searchError(502, 'Location search is temporarily unavailable. Please try again later.');
+        }
+        // ZERO_RESULTS -> try the next, larger radius tier.
+    }
+
+    return { results: [], radiusMeters: SEARCH_RADII_METERS[SEARCH_RADII_METERS.length - 1] };
+}
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ✅ Find Pharmacies Route
+app.post('/find-pharmacies', async (req, res) => {
+    const { city, lat, lng, openNow, minRating } = req.body;
+
+    try {
+        const origin = await resolveOrigin({ city, lat, lng });
+        if (!origin) {
+            return res.status(400).json({ error: 'Enter a city, or allow location access.' });
         }
 
-        const pharmacies = placesResponse.data.results.map((place) => ({
+        const { results: places, radiusMeters } = await nearbySearchWithWidening(origin, {
+            type: 'pharmacy',
+            ...(openNow ? { opennow: true } : {}),
+        });
+
+        let pharmacies = places.map((place) => ({
+            placeId: place.place_id,
             name: place.name,
             address: place.vicinity || 'Not Available',
-            rating: place.rating || 'No Rating',
-            openNow: place.opening_hours?.open_now ? 'Open Now' : 'Closed',
-            googleMapsLink: `https://www.google.com/maps/search/?api=1&query=${place.geometry.location.lat},${place.geometry.location.lng}`,
+            rating: place.rating || null,
+            openNow: typeof place.opening_hours?.open_now === 'boolean' ? place.opening_hours.open_now : null,
+            distanceKm: Math.round(haversineKm(origin.lat, origin.lng, place.geometry.location.lat, place.geometry.location.lng) * 10) / 10,
+            lat: place.geometry.location.lat,
+            lng: place.geometry.location.lng,
         }));
 
-        res.json(pharmacies);
+        if (minRating) {
+            pharmacies = pharmacies.filter((p) => (p.rating || 0) >= Number(minRating));
+        }
+
+        pharmacies.sort((a, b) => a.distanceKm - b.distanceKm);
+
+        res.json({ results: pharmacies, searchRadiusKm: radiusMeters / 1000, origin });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ error: error.message });
+        }
         console.error('❌ Error fetching pharmacies:', error.response?.data || error.message);
         res.status(500).json({ error: 'Failed to fetch pharmacy data. Try again later.' });
     }
@@ -359,54 +432,93 @@ app.post('/find-pharmacies', async (req, res) => {
 
 // ✅ Search Doctors Route
 app.post('/search-doctors', async (req, res) => {
-    const { city, specialty, urgency } = req.body;
+    const { city, lat, lng, specialty, urgency, openNow, minRating } = req.body;
 
-    if (!city || !specialty) {
-        return res.status(400).json({ error: 'City and specialty are required.' });
+    if (!specialty) {
+        return res.status(400).json({ error: 'Specialty is required.' });
+    }
+
+    // A real emergency shouldn't be routed into a business-listing search - the
+    // frontend handles this by showing an emergency panel instead of calling this
+    // endpoint at all; this is a defense-in-depth guard, not the primary control.
+    if (urgency === 'emergency') {
+        return res.status(400).json({ error: 'For emergencies, please contact emergency services directly rather than searching.' });
     }
 
     try {
-        console.log("Searching for city:", city);
-
-        const geoResponse = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json`, {
-            params: { address: city, key: GOOGLE_MAPS_API_KEY },
-        });
-
-        if (!geoResponse.data.results.length) {
-            return res.status(404).json({ error: 'City not found.' });
+        const origin = await resolveOrigin({ city, lat, lng });
+        if (!origin) {
+            return res.status(400).json({ error: 'Enter a city, or allow location access.' });
         }
 
-        const { lat, lng } = geoResponse.data.results[0].geometry.location;
-        let searchKeyword = specialty;
-        if (urgency === 'urgent') searchKeyword += ' urgent care';
-        else if (urgency === 'emergency') searchKeyword += ' emergency hospital';
+        const searchKeyword = urgency === 'urgent' ? `${specialty} urgent care` : specialty;
 
-        const placesResponse = await axios.get(`https://maps.googleapis.com/maps/api/place/nearbysearch/json`, {
+        const { results: places, radiusMeters } = await nearbySearchWithWidening(origin, {
+            keyword: searchKeyword,
+            type: 'doctor',
+            ...(openNow ? { opennow: true } : {}),
+        });
+
+        let doctors = places.map((place) => ({
+            placeId: place.place_id,
+            name: place.name,
+            specialty: specialty.charAt(0).toUpperCase() + specialty.slice(1),
+            address: place.vicinity || 'Not Available',
+            rating: place.rating || null,
+            openNow: typeof place.opening_hours?.open_now === 'boolean' ? place.opening_hours.open_now : null,
+            distanceKm: Math.round(haversineKm(origin.lat, origin.lng, place.geometry.location.lat, place.geometry.location.lng) * 10) / 10,
+            lat: place.geometry.location.lat,
+            lng: place.geometry.location.lng,
+        }));
+
+        if (minRating) {
+            doctors = doctors.filter((d) => (d.rating || 0) >= Number(minRating));
+        }
+
+        doctors.sort((a, b) => a.distanceKm - b.distanceKm);
+
+        res.json({ results: doctors, searchRadiusKm: radiusMeters / 1000, origin });
+    } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ error: error.message });
+        }
+        console.error('❌ Error fetching doctors:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Failed to fetch doctor data. Try again later.' });
+    }
+});
+
+// ✅ Lazy-loaded details (hours + phone) for a single place, fetched on demand
+// per-card rather than eagerly for every search result to keep searches fast
+// and avoid an N+1 Place Details call per result.
+app.get('/place-details', async (req, res) => {
+    const { placeId } = req.query;
+
+    if (!placeId) {
+        return res.status(400).json({ error: 'placeId is required.' });
+    }
+
+    try {
+        const detailsResponse = await axios.get('https://maps.googleapis.com/maps/api/place/details/json', {
             params: {
-                location: `${lat},${lng}`,
-                radius: 5000,
-                keyword: searchKeyword,
-                type: 'doctor',
+                place_id: placeId,
+                fields: 'formatted_phone_number,opening_hours',
                 key: GOOGLE_MAPS_API_KEY,
             },
         });
 
-        if (!placesResponse.data.results.length) {
-            return res.status(404).json({ error: 'No doctors found matching your criteria.' });
+        if (detailsResponse.data.status !== 'OK') {
+            console.error('❌ Place Details error:', detailsResponse.data.status, detailsResponse.data.error_message);
+            return res.status(502).json({ error: 'Failed to fetch details for this location.' });
         }
 
-        const doctors = placesResponse.data.results.map((place) => ({
-            name: place.name,
-            specialty: specialty.charAt(0).toUpperCase() + specialty.slice(1),
-            address: place.vicinity || 'Not Available',
-            rating: place.rating || 'No Rating',
-            googleMapsLink: `https://www.google.com/maps/search/?api=1&query=${place.geometry.location.lat},${place.geometry.location.lng}`,
-        }));
-
-        res.json(doctors);
+        const result = detailsResponse.data.result || {};
+        res.json({
+            phone: result.formatted_phone_number || null,
+            weekdayText: result.opening_hours?.weekday_text || null,
+        });
     } catch (error) {
-        console.error('Error fetching doctors:', error.response?.data || error.message);
-        res.status(500).json({ error: 'Failed to fetch doctor data. Try again later.' });
+        console.error('❌ Error fetching place details:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Failed to fetch details. Please try again later.' });
     }
 });
 

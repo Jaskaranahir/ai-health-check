@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import Chip from '../components/Chip';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://ai-health-check.onrender.com';
 
@@ -96,18 +97,6 @@ const STEP_VALIDATORS = {
     3: () => true,
     4: (data) => Boolean(data.ageGroup),
 };
-
-function Chip({ label, selected, onClick }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            style={{ ...styles.chip, ...(selected ? styles.chipSelected : {}) }}
-        >
-            {label}
-        </button>
-    );
-}
 
 function SymptomCheck() {
     const [formData, setFormData] = useState(INITIAL_FORM_DATA);
@@ -453,7 +442,13 @@ function SymptomCheck() {
                         </div>
 
                         <div style={styles.ctaRow}>
-                            <Link to="/contact-doctor" style={styles.ctaButton}>Find a Nearby Doctor</Link>
+                            <Link
+                                to="/contact-doctor"
+                                state={{ urgency: results.overallUrgency, specialty: 'general practitioner' }}
+                                style={styles.ctaButton}
+                            >
+                                Find a Nearby Doctor
+                            </Link>
                             <Link to="/find-pharmacy" style={styles.ctaButtonSecondary}>Find a Nearby Pharmacy</Link>
                         </div>
 
@@ -578,22 +573,6 @@ const styles = {
         flexWrap: 'wrap',
         gap: '8px',
     },
-    chip: {
-        padding: '10px 16px',
-        borderRadius: '999px',
-        border: '1.5px solid #d7ddd7',
-        background: '#fff',
-        color: '#333',
-        fontSize: '14px',
-        cursor: 'pointer',
-        transition: 'all 0.15s ease',
-    },
-    chipSelected: {
-        background: '#4caf50',
-        borderColor: '#4caf50',
-        color: '#fff',
-        fontWeight: 'bold',
-    },
     stepNav: {
         display: 'flex',
         gap: '10px',
@@ -639,7 +618,8 @@ const styles = {
         display: 'inline-block',
         padding: '8px 16px',
         borderRadius: '20px',
-        border: '1px solid',
+        borderWidth: '1px',
+        borderStyle: 'solid',
         fontSize: '14px',
         fontWeight: 'bold',
         marginBottom: '15px',
