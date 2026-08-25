@@ -237,6 +237,7 @@ Follow these rules:
 - Always list the most common, everyday explanations first. Order possibleConditions from most likely to least likely - never from most to least severe, and never lead with a rare or alarming condition.
 - Use warm, plain, non-alarming language, like a calm, experienced nurse reassuring a worried friend. Avoid clinical jargon and dramatic phrasing ("could be fatal", "serious risk of...") unless the situation genuinely warrants it.
 - Default toward "low" overallUrgency for everyday symptoms. Only raise it to "medium" or "high" when the described duration, severity, and factors genuinely warrant it.
+- Weigh onset, progression, and associated symptoms as real clinical signals: sudden onset, symptoms that are getting worse, or red-flag associated symptoms (e.g. chest pain, fainting, unusual bleeding, numbness/weakness, vision changes) can justify raising urgency even for an otherwise common complaint.
 - Even when urgency is high, stay calm and clear - state plainly what to do next rather than emphasizing danger.
 - Frame the whole response as "here's what this probably is, and what to do about it," not a list of diseases to worry about.
 - Only include a condition in possibleConditions if it is a plausible explanation given the input - the list should feel reassuringly ordinary, not exhaustively worst-case.
@@ -244,22 +245,31 @@ Follow these rules:
 Always respond by calling the provide_symptom_analysis tool.`;
 
 app.post('/symptoms', async (req, res) => {
-    const { symptoms, duration, severity, ageGroup } = req.body;
-    const factors = Array.isArray(req.body.factors) ? req.body.factors : [];
+    const { symptoms, duration, severity, ageGroup, location, onset, progression, betterOrWorse, additionalNotes } = req.body;
+    const associatedSymptoms = Array.isArray(req.body.associatedSymptoms) ? req.body.associatedSymptoms : [];
 
-    if (!symptoms || !duration || !severity || !ageGroup) {
+    if (!symptoms || !duration || !severity || !ageGroup || !onset || !progression) {
         return res.status(400).json({ error: "All required fields must be filled." });
     }
 
     try {
-        const userPrompt = `A patient reports:
-- Symptoms: ${symptoms}
-- Duration: ${duration}
-- Severity: ${severity}
-- Additional factors: ${factors.length > 0 ? factors.join(", ") : "None"}
-- Age group: ${ageGroup}
+        const formatEnum = (value) => (value ? String(value).replace(/_/g, ' ') : '');
 
-Provide a calm, reassuring symptom analysis by calling the provide_symptom_analysis tool.`;
+        const userPrompt = [
+            'A patient reports:',
+            `- Symptoms: ${symptoms}`,
+            location ? `- Location: ${formatEnum(location)}` : null,
+            `- Onset: ${formatEnum(onset)}`,
+            `- Duration: ${formatEnum(duration)}`,
+            `- Severity: ${severity}`,
+            `- Progression: ${formatEnum(progression)}`,
+            associatedSymptoms.length > 0 ? `- Associated symptoms: ${associatedSymptoms.map(formatEnum).join(', ')}` : null,
+            betterOrWorse ? `- What makes it better or worse: ${betterOrWorse}` : null,
+            `- Age group: ${ageGroup}`,
+            additionalNotes ? `- Additional notes from the patient: ${additionalNotes}` : null,
+            '',
+            'Provide a calm, reassuring symptom analysis by calling the provide_symptom_analysis tool.',
+        ].filter((line) => line !== null).join('\n');
 
         const response = await anthropic.messages.create({
             model: 'claude-sonnet-5',
