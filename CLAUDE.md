@@ -14,7 +14,7 @@ AI Health Symptom Checker — a web app where users describe symptoms and get a 
 - **Phase 1 (Claude-based symptom analysis)** — done, pushed.
 - **Phase 2 (guided multi-step symptom intake form)** — done, pushed.
 - **Phase 3 (doctor/pharmacy search: geolocation, reliability fixes, new UI)** — done, pushed.
-- **Phase 4 (sign-in + MongoDB history)** — not started. Before testing this locally, **the current machine's IP needs to be whitelisted in MongoDB Atlas's Network Access settings** — `MONGO_URI` connections have been failing in dev (DNS/connection error on `mongoose.connect`).
+- **Phase 4 (sign-in + MongoDB history)** — not started. Before testing this locally, **the current machine's IP needs to be whitelisted in MongoDB Atlas's Network Access settings** — `MONGO_URI` connections have been failing in dev (DNS/connection error on `mongoose.connect`). Confirmed still broken as of 2026-09-20: with Mongo disconnected, `/login`, `/create-account`, `/user-history`, and the `/save-*` routes each hang for ~10s (Mongoose's connection buffering timeout) before failing with a 500 — this is expected until the IP is whitelisted, not a code bug.
 - **Phase 5 (final UI polish)** — not started.
 
 ## Commands
@@ -59,7 +59,8 @@ Everything (DB connection, schemas, and all routes) lives in this one Express fi
 ### Frontend (`fe/src`)
 - `App.js` defines all routes and a `PrivateRoute` wrapper that gates `/dashboard` by checking `localStorage.getItem('token')` — this is the only route protection; there's no token refresh/expiry handling.
 - `components/Navbar.js` reads `token`/`email` from `localStorage` directly to render logged-in vs. logged-out state and handle logout.
-- `pages/` — one file per route (`HomePage`, `SignIn`, `SymptomCheck`, `ContactDoctor`, `Findpharmacy`, `Dashboard`). `SymptomCheck.js`, `ContactDoctor.js`, and `Findpharmacy.js` read `process.env.REACT_APP_API_BASE_URL`, falling back to the production URL, so a local `fe/.env.local` (gitignored, not committed) with `REACT_APP_API_BASE_URL=http://localhost:5001` points local dev at a local backend. `SignIn.js` and `Dashboard.js` still call the backend with a **hardcoded** production URL via `axios` and haven't been migrated to this pattern yet — no shared API client module exists.
+- `pages/` — one file per route (`HomePage`, `SignIn`, `SymptomCheck`, `ContactDoctor`, `Findpharmacy`, `Dashboard`). All five page files that call the backend (`SymptomCheck.js`, `ContactDoctor.js`, `Findpharmacy.js`, `SignIn.js`, `Dashboard.js`) now read `process.env.REACT_APP_API_BASE_URL`, falling back to the production URL, so a local `fe/.env.local` (gitignored, not committed) with `REACT_APP_API_BASE_URL=http://localhost:5001` points local dev at a local backend — there's still no shared API client module, so this constant is copy-pasted per file rather than imported.
+- `components/Navbar.js` renders in normal document flow, **not** `position: fixed` — don't reintroduce top padding/margin on `#root` or `body` to "make room" for it (a stale `#root { padding-top: 60px }` in `styles.css` did exactly that and was removed 2026-09-20 after it pushed the whole app, navbar included, down and left a visible gap above it).
 - `components/Chip.js` — the pill-style selectable button used across `SymptomCheck`, `ContactDoctor`, and `Findpharmacy`; the one piece of UI shared between pages so far (everything else is duplicated per-page inline styles, matching this codebase's existing convention).
 - No shared auth/data context or state library (no Redux/Context) — logged-in state and history data are re-fetched/read from `localStorage` independently in each component that needs them.
 
