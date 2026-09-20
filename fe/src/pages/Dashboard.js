@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://ai-health-check.onrender.com';
+
 function Dashboard() {
     const navigate = useNavigate();
     const [userEmail, setUserEmail] = useState('');
@@ -27,7 +29,7 @@ function Dashboard() {
     // ✅ Fetch user history from backend (Mock for now)
     const fetchUserHistory = async (email) => {
         try {
-            const response = await axios.get(`https://ai-health-check.onrender.com/user-history?email=${email}`);
+            const response = await axios.get(`${API_BASE_URL}/user-history?email=${email}`);
             setHistory(response.data);
         } catch (error) {
             console.error('Error fetching history:', error);

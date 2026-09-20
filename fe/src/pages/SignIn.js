@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './SignIn.css';
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://ai-health-check.onrender.com';
+
 function SignIn() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -29,8 +31,8 @@ function SignIn() {
 
         try {
             const url = isLogin
-                ? 'https://ai-health-check.onrender.com/login'  // Login URL
-                : 'https://ai-health-check.onrender.com/create-account';  // Sign-up URL
+                ? `${API_BASE_URL}/login`
+                : `${API_BASE_URL}/create-account`;
 
             const response = await axios.post(url, { email, password });
 
